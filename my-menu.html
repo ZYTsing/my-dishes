@@ -239,7 +239,7 @@
                         <svg class="w-4 h-4 mr-1 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                         </svg>
-                        备料汇总
+                        备料汇总（已自动合并相同食材）
                     </h4>
                     <div id="modal-ingredients-list" class="flex flex-wrap gap-2"></div>
                 </div>
@@ -315,7 +315,6 @@
             { id: 28, category: 'cold', name: '🥗凉菜新作（冷盘盲盒）', image: 'https://cdn.jsdelivr.net/gh/ZYTsing/my-dishes@main/凉菜盲盒.jpg', time: 20, ingredients: '当季时蔬创意搭配，全新口味尝试，清爽开胃', tag: '🆕新尝试' }
         ];
 
-
         // 状态管理
         let selectedDishes = JSON.parse(localStorage.getItem('selectedDishes')) || [];
 
@@ -337,6 +336,62 @@
             const total = maxTime + extraTime;
             
             return { maxTime, extraTime, total, extraDishes };
+        }
+
+        // 食材合并函数：将"姜1个"×3合并为"姜3个"
+        function mergeIngredients(ingredientsList) {
+            const ingredientMap = new Map();
+            
+            ingredientsList.forEach(item => {
+                // 跳过空字符串
+                if (!item.trim()) return;
+                
+                // 匹配模式：食材名 + 数字 + 单位
+                // 例如：板栗200g、姜1个、蒜4瓣、盒马花胶鸡1盒
+                const match = item.match(/^(.+?)(\d+\.?\d*)(.+)$/);
+                
+                if (match) {
+                    const name = match[1].trim();
+                    const amount = parseFloat(match[2]);
+                    const unit = match[3].trim();
+                    const key = name + unit; // 用"名称+单位"作为唯一键
+                    
+                    if (ingredientMap.has(key)) {
+                        // 已存在则累加数量
+                        const existing = ingredientMap.get(key);
+                        existing.amount += amount;
+                    } else {
+                        // 不存在则新增
+                        ingredientMap.set(key, {
+                            name: name,
+                            amount: amount,
+                            unit: unit
+                        });
+                    }
+                } else {
+                    // 无法解析的（如"五常大米，管够"），作为独立项
+                    ingredientMap.set(item, {
+                        name: item,
+                        amount: 1,
+                        unit: '',
+                        isLiteral: true
+                    });
+                }
+            });
+            
+            // 转换回字符串数组
+            const result = [];
+            ingredientMap.forEach(item => {
+                if (item.isLiteral) {
+                    result.push(item.name);
+                } else {
+                    // 如果是整数则不显示小数点
+                    const amountStr = Number.isInteger(item.amount) ? item.amount : item.amount.toFixed(1);
+                    result.push(`${item.name}${amountStr}${item.unit}`);
+                }
+            });
+            
+            return result;
         }
 
         // 渲染菜品卡片
@@ -528,7 +583,7 @@
                 </div>
             `).join('');
 
-            // 合并同类原料
+            // 收集并合并食材
             const allIngredients = [];
             selectedDishData.forEach(dish => {
                 if (dish.ingredients && !dish.ingredients.includes('保密') && !dish.ingredients.includes('揭晓')) {
@@ -539,10 +594,13 @@
                 }
             });
 
-            // 渲染原料列表
+            // 使用合并函数去重并累加
+            const mergedIngredients = mergeIngredients(allIngredients);
+
+            // 渲染原料列表（已合并）
             const ingredientsListEl = document.getElementById('modal-ingredients-list');
-            if (allIngredients.length > 0) {
-                ingredientsListEl.innerHTML = allIngredients.map(ing => `
+            if (mergedIngredients.length > 0) {
+                ingredientsListEl.innerHTML = mergedIngredients.map(ing => `
                     <span class="ingredient-tag text-xs text-gray-700 px-3 py-1.5 rounded-full">${ing}</span>
                 `).join('');
             } else {
@@ -561,13 +619,13 @@
             const selectedDishData = selectedDishes.map(id => dishesData.find(d => d.id === id)).filter(Boolean);
             const timeInfo = calculateTotalTime(selectedDishes);
             
-            // 格式化菜品清单（使用换行符便于<pre>标签显示）
+            // 格式化菜品清单
             const dishesText = selectedDishData.map(d => {
                 const tagText = d.tag ? ` ${d.tag}` : '';
                 return `- ${d.name}（${d.time}分钟）${tagText}`;
             }).join('\n');
 
-            // 格式化原料
+            // 收集食材并合并相同项
             const allIngredients = [];
             selectedDishData.forEach(dish => {
                 if (dish.ingredients && !dish.ingredients.includes('保密') && !dish.ingredients.includes('揭晓')) {
@@ -577,7 +635,10 @@
                     });
                 }
             });
-            const ingredientsText = allIngredients.join('\n') || '盲盒菜品原料保密中~';
+            
+            // 关键：合并相同食材（如3个"姜1个"→"姜3个"）
+            const mergedIngredients = mergeIngredients(allIngredients);
+            const ingredientsText = mergedIngredients.join('\n') || '盲盒菜品原料保密中~';
 
             const now = new Date();
             const timeStr = now.toLocaleString('zh-CN');
@@ -586,7 +647,7 @@
             sendBtn.disabled = true;
             sendBtn.innerHTML = '<svg class="animate-spin w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>发送中...';
 
-            // 关键修改：将 to_email 改为 email，与模板中的 {{email}} 对应
+            // 与模板变量对应：email, dishes, ingredients, time, order_time
             emailjs.send("my-dishes", "template_b6rjphj", {
                 email: "415888875@qq.com",
                 dishes: dishesText,
@@ -599,7 +660,6 @@
                 sendBtn.disabled = false;
                 sendBtn.innerHTML = `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>发送备菜清单`;
             }, function(error) {
-                // 显示详细错误信息帮助调试
                 console.error('EmailJS Error:', error);
                 showToast('发送失败：' + (error.text || '请检查网络或配置'));
                 sendBtn.disabled = false;
