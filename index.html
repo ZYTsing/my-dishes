@@ -383,10 +383,17 @@
         // 更新底部栏
         function updateFooter() {
             const count = selectedDishes.length;
-            const totalTime = selectedDishes.reduce((sum, id) => {
-                const dish = dishesData.find(d => d.id === id);
-                return sum + (dish ? dish.time : 0);
-            }, 0);
+            // 计算逻辑：取最长时间 + (菜品数-1)*10分钟备菜时间
+            let totalTime = 0;
+            if (selectedDishes.length > 0) {
+                const times = selectedDishes.map(id => {
+                    const dish = dishesData.find(d => d.id === id);
+                    return dish ? dish.time : 0;
+                });
+                const maxTime = Math.max(...times);
+                const prepTime = (selectedDishes.length - 1) * 10;
+                totalTime = maxTime + prepTime;
+            }
 
             document.getElementById('count-text').textContent = count;
             document.getElementById('total-time').textContent = totalTime;
@@ -481,11 +488,14 @@
             } else {
                 ingredientsListEl.innerHTML = '<span class="text-xs text-gray-400">盲盒菜品原料保密中~</span>';
             }
-
-            // 更新总时间
-            const totalTime = selectedDishData.reduce((sum, d) => sum + d.time, 0);
+            // 计算逻辑：取最长时间 + (菜品数-1)*10分钟备菜时间
+            let totalTime = 0;
+            if (selectedDishData.length > 0) {
+                const maxTime = Math.max(...selectedDishData.map(d => d.time));
+                const prepTime = (selectedDishData.length - 1) * 10;
+                totalTime = maxTime + prepTime;
+            }
             document.getElementById('modal-total-time').textContent = totalTime;
-        }
 
         // 发送邮件
         function sendEmail() {
@@ -509,7 +519,13 @@
             });
             const ingredientsText = allIngredients.join('\n') || '盲盒菜品原料保密中~';
 
-            const totalTime = selectedDishData.reduce((sum, d) => sum + d.time, 0);
+            // 计算逻辑：取最长时间 + (菜品数-1)*10分钟备菜时间
+            let totalTime = 0;
+            if (selectedDishData.length > 0) {
+                const maxTime = Math.max(...selectedDishData.map(d => d.time));
+                const prepTime = (selectedDishData.length - 1) * 10;
+                totalTime = maxTime + prepTime;
+            }
             const now = new Date();
             const timeStr = now.toLocaleString('zh-CN');
 
